@@ -1,0 +1,509 @@
+--// 🟥 ETFB Brainrot Dupe
+if game.CoreGui:FindFirstChild("ETFB_DupeGUI") then
+	game.CoreGui.ETFB_DupeGUI:Destroy()
+end
+
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+--------------------------------------------------------
+-- INSTANT HELD ITEM CLONER
+--------------------------------------------------------
+local function forceArchivable(root)
+	if not root then return end
+	pcall(function() root.Archivable = true end)
+	for _, v in ipairs(root:GetDescendants()) do
+		pcall(function() v.Archivable = true end)
+	end
+end
+
+-- Only detects items YOU are holding
+local function getOnlyYourHeldItem()
+	local player = Players.LocalPlayer
+	if not player or not player.Character then return nil end
+	
+	local character = player.Character
+	
+	-- Check ONLY for tools that are actually in YOUR character's hands
+	for _, item in pairs(character:GetChildren()) do
+		if item:IsA("Tool") then
+			-- This is a tool equipped to YOUR character
+			return item
+		end
+	end
+	
+	return nil
+end
+
+-- Instant clone function
+local function instantCloneYourHeldItem()
+	local heldItem = getOnlyYourHeldItem()
+	if not heldItem then
+		return nil, "You're not holding anything!"
+	end
+	
+	-- Check if it's YOUR item (in your character)
+	if not heldItem:IsDescendantOf(Players.LocalPlayer.Character) then
+		return nil, "Not your item!"
+	end
+	
+	-- Don't clone if already cloned
+	if heldItem.Name:find("[CLONE]") or heldItem.Name:find("[DUPE]") or heldItem.Name:find("[FAKE]") then
+		return nil, "Already a cloned item!"
+	end
+	
+	-- Make archivable and clone
+	forceArchivable(heldItem)
+	local success, cloned = pcall(function()
+		return heldItem:Clone()
+	end)
+	
+	if not success or not cloned then
+		return nil, "Failed to clone item!"
+	end
+	
+	-- Name it
+	cloned.Name = "[CLONE] " .. heldItem.Name
+	
+	-- Preserve the grip so it stays in hand
+	if cloned:IsA("Tool") then
+		-- Keep the original grip
+		if heldItem:FindFirstChild("Grip") then
+			cloned.Grip = heldItem.Grip
+		end
+		
+		-- Make sure it has a Handle
+		if not cloned:FindFirstChild("Handle") then
+			-- Find any part and make it the Handle
+			for _, part in pairs(cloned:GetChildren()) do
+				if part:IsA("BasePart") then
+					part.Name = "Handle"
+					break
+				end
+			end
+		end
+		
+		-- Configure tool properties
+		cloned.Enabled = true
+		cloned.CanBeDropped = true
+	end
+	
+	-- Put in YOUR backpack (inventory)
+	local player = Players.LocalPlayer
+	local backpack = player:FindFirstChild("Backpack")
+	
+	if backpack then
+		cloned.Parent = backpack
+		return cloned, "Cloned! Check your backpack."
+	else
+		-- If no backpack, put in StarterPack
+		local starterPack = game:FindFirstChild("StarterPack")
+		if starterPack then
+			cloned.Parent = starterPack
+			return cloned, "Cloned! Check StarterPack."
+		else
+			-- Last resort: workspace
+			cloned.Parent = Workspace
+			return cloned, "Cloned to workspace!"
+		end
+	end
+end
+
+-- Auto-dupe function with cooldown
+local autoDuping = false
+local lastDupeTime = 0
+local AUTO_DUPE_COOLDOWN = 1 -- 1 second cooldown
+
+local function startAutoDupe()
+	if autoDuping then return end
+	autoDuping = true
+	
+	spawn(function()
+		while autoDuping do
+			local currentTime = tick()
+			
+			-- Check cooldown
+			if currentTime - lastDupeTime >= AUTO_DUPE_COOLDOWN then
+				local clonedItem, message = instantCloneYourHeldItem()
+				lastDupeTime = currentTime
+				
+				if clonedItem then
+					print("[AUTO-DUPE] Cloned: " .. clonedItem.Name)
+				end
+				
+				-- Update status if GUI exists
+				if ScreenGui and ScreenGui.Parent then
+					if clonedItem then
+						statusLabel.Text = "Auto: Cloned " .. clonedItem.Name
+						statusLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
+					else
+						statusLabel.Text = "Auto: " .. (message or "Waiting...")
+						statusLabel.TextColor3 = Color3.fromRGB(200, 200, 0)
+					end
+				end
+			end
+			
+			task.wait(0.1) -- Small wait to prevent CPU overload
+		end
+	end)
+end
+
+local function stopAutoDupe()
+	autoDuping = false
+	if ScreenGui and ScreenGui.Parent then
+		statusLabel.Text = "Auto-Dupe: OFF"
+		statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	end
+end
+
+--------------------------------------------------------
+-- MINIMIZED TOGGLE CIRCLE
+--------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ETFB_DupeGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.ResetOnSpawn = false
+
+-- Main GUI (hidden by default)
+local outlineFrame = Instance.new("Frame")
+outlineFrame.Size = UDim2.new(0, 340, 0, 220)
+outlineFrame.Position = UDim2.new(0.5, -170, 0.5, -110)
+outlineFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+outlineFrame.BorderSizePixel = 0
+outlineFrame.Visible = false
+outlineFrame.Parent = ScreenGui
+Instance.new("UICorner", outlineFrame).CornerRadius = UDim.new(0, 10)
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(1, -6, 1, -6)
+mainFrame.Position = UDim2.new(0, 3, 0, 3)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = outlineFrame
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 36)
+title.Position = UDim2.new(0, 10, 0, 8)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 22
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Text = "ETFB Brainrot Dupe"
+title.Parent = mainFrame
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 36, 0, 28)
+closeBtn.Position = UDim2.new(1, -44, 0, 8)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 30, 30)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.BorderSizePixel = 0
+closeBtn.Parent = mainFrame
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+closeBtn.MouseButton1Click:Connect(function() 
+	outlineFrame.Visible = false 
+	toggleCircle.Visible = true
+end)
+
+-- INSTANT DUPE BUTTON
+local instantDupeBtn = Instance.new("TextButton")
+instantDupeBtn.Size = UDim2.new(0.9, 0, 0, 40)
+instantDupeBtn.Position = UDim2.new(0.05, 0, 0.3, 0)
+instantDupeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+instantDupeBtn.Text = "INSTANT DUPE"
+instantDupeBtn.Font = Enum.Font.GothamBold
+instantDupeBtn.TextSize = 18
+instantDupeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+instantDupeBtn.BorderSizePixel = 0
+instantDupeBtn.Parent = mainFrame
+Instance.new("UICorner", instantDupeBtn).CornerRadius = UDim.new(0, 8)
+
+-- AUTO DUPE BUTTON (Green when ON)
+local autoDupeBtn = Instance.new("TextButton")
+autoDupeBtn.Size = UDim2.new(0.9, 0, 0, 40)
+autoDupeBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
+autoDupeBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+autoDupeBtn.Text = "AUTO DUPE: OFF"
+autoDupeBtn.Font = Enum.Font.GothamBold
+autoDupeBtn.TextSize = 18
+autoDupeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoDupeBtn.BorderSizePixel = 0
+autoDupeBtn.Parent = mainFrame
+Instance.new("UICorner", autoDupeBtn).CornerRadius = UDim.new(0, 8)
+
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, 0, 0, 24)
+infoLabel.Position = UDim2.new(0, 0, 0.7, 0)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextSize = 16
+infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+infoLabel.Text = "Hold brainrots to dupe!"
+infoLabel.Parent = mainFrame
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 40)
+statusLabel.Position = UDim2.new(0, 10, 0.8, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+statusLabel.Text = "Status: Ready | Auto: 1s cooldown"
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.TextWrapped = true
+statusLabel.Parent = mainFrame
+
+--------------------------------------------------------
+-- PLAIN BLACK TOGGLE CIRCLE (ALWAYS VISIBLE)
+--------------------------------------------------------
+local toggleCircle = Instance.new("TextButton")
+toggleCircle.Name = "ToggleCircle"
+toggleCircle.Size = UDim2.new(0, 50, 0, 50)
+toggleCircle.Position = UDim2.new(0, 20, 0.5, -25)
+toggleCircle.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Plain black
+toggleCircle.BackgroundTransparency = 0.2 -- Slight transparency
+toggleCircle.Text = "D"
+toggleCircle.Font = Enum.Font.GothamBold
+toggleCircle.TextSize = 20
+toggleCircle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleCircle.BorderSizePixel = 0
+toggleCircle.ZIndex = 999 -- High ZIndex to stay on top
+toggleCircle.Parent = ScreenGui
+
+-- Make it a perfect circle
+local circleCorner = Instance.new("UICorner", toggleCircle)
+circleCorner.CornerRadius = UDim.new(1, 0)
+
+-- Add a subtle border outline
+local circleStroke = Instance.new("UIStroke", toggleCircle)
+circleStroke.Color = Color3.fromRGB(100, 100, 100)
+circleStroke.Thickness = 2
+circleStroke.Transparency = 0.5
+
+-- Function to keep circle on screen
+local function keepCircleOnScreen()
+	while toggleCircle and toggleCircle.Parent do
+		-- Get current position
+		local currentPos = toggleCircle.Position
+		
+		-- Ensure it stays within screen bounds
+		local screenSize = CoreGui.AbsoluteSize
+		local minX = 0
+		local maxX = screenSize.X - toggleCircle.AbsoluteSize.X
+		local minY = 0
+		local maxY = screenSize.Y - toggleCircle.AbsoluteSize.Y
+		
+		-- Convert current position to absolute coordinates for checking
+		local absX = currentPos.X.Offset
+		local absY = currentPos.Y.Offset
+		
+		-- Adjust scale components if needed
+		local scaleX = currentPos.X.Scale
+		local scaleY = currentPos.Y.Scale
+		
+		-- If scale positions would put it off-screen, adjust to absolute positioning
+		if scaleX < 0 then
+			scaleX = 0
+			absX = 10
+		elseif scaleX > 1 then
+			scaleX = 1
+			absX = -toggleCircle.AbsoluteSize.X - 10
+		end
+		
+		if scaleY < 0 then
+			scaleY = 0
+			absY = 10
+		elseif scaleY > 1 then
+			scaleY = 1
+			absY = -toggleCircle.AbsoluteSize.Y - 10
+		end
+		
+		-- Ensure absolute position stays within bounds
+		if absX < minX then
+			absX = minX + 10
+		elseif absX > maxX then
+			absX = maxX - 10
+		end
+		
+		if absY < minY then
+			absY = minY + 10
+		elseif absY > maxY then
+			absY = maxY - 10
+		end
+		
+		-- Apply corrected position
+		toggleCircle.Position = UDim2.new(scaleX, absX, scaleY, absY)
+		
+		task.wait(0.5) -- Check every 0.5 seconds
+	end
+end
+
+--------------------------------------------------------
+-- TOGGLE CIRCLE FUNCTIONALITY
+--------------------------------------------------------
+-- Toggle GUI visibility
+toggleCircle.MouseButton1Click:Connect(function()
+	outlineFrame.Visible = not outlineFrame.Visible
+	toggleCircle.Visible = true -- Always stay visible
+end)
+
+-- Make toggle circle draggable
+local circleDragging, circleDragInput, circleStartPos, circleStartInputPos
+toggleCircle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		circleDragging = true
+		circleStartPos = toggleCircle.Position
+		circleStartInputPos = input.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then circleDragging = false end
+		end)
+	end
+end)
+
+toggleCircle.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		circleDragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == circleDragInput and circleDragging then
+		local delta = input.Position - circleStartInputPos
+		toggleCircle.Position = UDim2.new(
+			circleStartPos.X.Scale,
+			circleStartPos.X.Offset + delta.X,
+			circleStartPos.Y.Scale,
+			circleStartPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+--------------------------------------------------------
+-- BUTTON FUNCTIONS
+--------------------------------------------------------
+-- INSTANT DUPE BUTTON
+instantDupeBtn.MouseButton1Click:Connect(function()
+	if instantDupeBtn:GetAttribute("Processing") then return end
+	instantDupeBtn:SetAttribute("Processing", true)
+	
+	-- Save original color
+	local originalColor = instantDupeBtn.BackgroundColor3
+	
+	-- Flash button to show it's working
+	instantDupeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+	instantDupeBtn.Text = "CLONING..."
+	
+	-- Instant clone
+	local clonedItem, message = instantCloneYourHeldItem()
+	
+	if clonedItem then
+		statusLabel.Text = "Instantly cloned: " .. clonedItem.Name
+		statusLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
+		-- Flash green
+		instantDupeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+		task.wait(0.1)
+		instantDupeBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+		task.wait(0.1)
+	else
+		statusLabel.Text = "Failed: " .. (message or "Error")
+		statusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
+		-- Flash red
+		instantDupeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		task.wait(0.1)
+	end
+	
+	-- Reset button
+	instantDupeBtn.BackgroundColor3 = originalColor
+	instantDupeBtn.Text = "INSTANT DUPE"
+	instantDupeBtn:SetAttribute("Processing", false)
+end)
+
+-- AUTO DUPE BUTTON
+autoDupeBtn.MouseButton1Click:Connect(function()
+	if autoDuping then
+		-- Stop auto-dupe
+		stopAutoDupe()
+		autoDupeBtn.Text = "AUTO DUPE: OFF"
+		autoDupeBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 200) -- Blue when OFF
+		statusLabel.Text = "Auto-Dupe: OFF"
+		statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	else
+		-- Start auto-dupe
+		startAutoDupe()
+		autoDupeBtn.Text = "AUTO DUPE: ON"
+		autoDupeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- Green when ON
+		statusLabel.Text = "Auto-Dupe: ON (1s cooldown)"
+		statusLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
+	end
+end)
+
+-- Make main GUI draggable too
+local guiDragging, guiDragInput, guiStartPos, guiStartInputPos
+outlineFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		guiDragging = true
+		guiStartPos = outlineFrame.Position
+		guiStartInputPos = input.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then guiDragging = false end
+		end)
+	end
+end)
+
+outlineFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		guiDragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == guiDragInput and guiDragging then
+		local delta = input.Position - guiStartInputPos
+		outlineFrame.Position = UDim2.new(
+			guiStartPos.X.Scale,
+			guiStartPos.X.Offset + delta.X,
+			guiStartPos.Y.Scale,
+			guiStartPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+--------------------------------------------------------
+-- AUTO-DETECT HELD ITEM
+--------------------------------------------------------
+spawn(function()
+	while ScreenGui and ScreenGui.Parent do
+		task.wait(0.5)
+		local heldItem = getOnlyYourHeldItem()
+		if heldItem then
+			if not autoDuping then
+				statusLabel.Text = "Holding: " .. heldItem.Name
+				statusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+			end
+		else
+			if not autoDuping then
+				statusLabel.Text = "Not holding anything"
+				statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+			end
+		end
+	end
+end)
+
+-- Start the circle on-screen protection
+spawn(keepCircleOnScreen)
+
+-- Clean up auto-dupe when GUI is closed
+ScreenGui.Destroying:Connect(function()
+	stopAutoDupe()
+end)
+
+-- Show toggle circle initially (always visible)
+toggleCircle.Visible = true
+outlineFrame.Visible = false
